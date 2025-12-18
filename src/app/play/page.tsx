@@ -602,6 +602,39 @@ function PlayPageClient() {
   // 工具函数（Utils）
   // -----------------------------------------------------------------------------
 
+  // 判断剧集是否已完结
+  const isSeriesCompleted = (detail: SearchResult | null): boolean => {
+    if (!detail) return false;
+
+    // 方法1：通过 vod_remarks 判断
+    if (detail.vod_remarks) {
+      const remarks = detail.vod_remarks.toLowerCase();
+      // 判定为完结的关键词
+      const completedKeywords = ['全', '完结', '大结局', 'end', '完'];
+      // 判定为连载的关键词
+      const ongoingKeywords = ['更新至', '连载', '第', '更新到'];
+
+      // 如果包含连载关键词，则为连载中
+      if (ongoingKeywords.some(keyword => remarks.includes(keyword))) {
+        return false;
+      }
+
+      // 如果包含完结关键词，则为已完结
+      if (completedKeywords.some(keyword => remarks.includes(keyword))) {
+        return true;
+      }
+    }
+
+    // 方法2：通过 vod_total 和实际集数对比判断
+    if (detail.vod_total && detail.vod_total > 0 && detail.episodes && detail.episodes.length > 0) {
+      // 如果实际集数 >= 总集数，则为已完结
+      return detail.episodes.length >= detail.vod_total;
+    }
+
+    // 无法判断，默认返回 false（连载中）
+    return false;
+  };
+
   // 播放源优选函数
   const preferBestSource = async (
     sources: SearchResult[]
@@ -2758,11 +2791,13 @@ function PlayPageClient() {
         await saveFavorite(currentSourceRef.current, currentIdRef.current, {
           title: videoTitleRef.current,
           source_name: detailRef.current?.source_name || '',
-          year: detailRef.current?.year,
+          year: detailRef.current?.year || 'unknown',
           cover: detailRef.current?.poster || '',
           total_episodes: detailRef.current?.episodes.length || 1,
           save_time: Date.now(),
           search_title: searchTitle,
+          is_completed: isSeriesCompleted(detailRef.current),
+          vod_remarks: detailRef.current?.vod_remarks,
         });
         setFavorited(true);
       }
@@ -4288,14 +4323,28 @@ function PlayPageClient() {
       <div className='flex flex-col gap-3 py-4 px-5 lg:px-[3rem] 2xl:px-20'>
         {/* 第一行：影片标题 */}
         <div className='py-1'>
-          <h1 className='text-xl font-semibold text-gray-900 dark:text-gray-100'>
-            {videoTitle || '影片标题'}
-            {totalEpisodes > 1 && (
-              <span className='text-gray-500 dark:text-gray-400'>
-                {` > ${
-                  detail?.episodes_titles?.[currentEpisodeIndex] ||
-                  `第 ${currentEpisodeIndex + 1} 集`
+          <h1 className='text-xl font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2 flex-wrap'>
+            <span>
+              {videoTitle || '影片标题'}
+              {totalEpisodes > 1 && (
+                <span className='text-gray-500 dark:text-gray-400'>
+                  {` > ${
+                    detail?.episodes_titles?.[currentEpisodeIndex] ||
+                    `第 ${currentEpisodeIndex + 1} 集`
+                  }`}
+                </span>
+              )}
+            </span>
+            {/* 完结状态标识 */}
+            {detail && totalEpisodes > 1 && (
+              <span
+                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                  isSeriesCompleted(detail)
+                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                    : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
                 }`}
+              >
+                {isSeriesCompleted(detail) ? '已完结' : '连载中'}
               </span>
             )}
           </h1>

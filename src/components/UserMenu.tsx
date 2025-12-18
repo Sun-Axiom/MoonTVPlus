@@ -3,6 +3,7 @@
 'use client';
 
 import {
+  Bell,
   Check,
   ChevronDown,
   Copy,
@@ -28,6 +29,7 @@ import { UpdateStatus } from '@/lib/version_check';
 import { useVersionCheck } from './VersionCheckProvider';
 import { VersionPanel } from './VersionPanel';
 import { OfflineDownloadPanel } from './OfflineDownloadPanel';
+import { NotificationPanel } from './NotificationPanel';
 
 interface AuthInfo {
   username?: string;
@@ -43,9 +45,11 @@ export const UserMenu: React.FC = () => {
   const [isSubscribeOpen, setIsSubscribeOpen] = useState(false);
   const [isVersionPanelOpen, setIsVersionPanelOpen] = useState(false);
   const [isOfflineDownloadPanelOpen, setIsOfflineDownloadPanelOpen] = useState(false);
+  const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
   const [authInfo, setAuthInfo] = useState<AuthInfo | null>(null);
   const [storageType, setStorageType] = useState<string>('localstorage');
   const [mounted, setMounted] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // 订阅相关状态
   const [subscribeEnabled, setSubscribeEnabled] = useState(false);
@@ -127,6 +131,36 @@ export const UserMenu: React.FC = () => {
   // 确保组件已挂载
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  // 加载未读通知数量
+  const loadUnreadCount = async () => {
+    try {
+      const response = await fetch('/api/notifications');
+      if (response.ok) {
+        const data = await response.json();
+        setUnreadCount(data.unreadCount || 0);
+      }
+    } catch (error) {
+      console.error('加载未读通知数量失败:', error);
+    }
+  };
+
+  // 首次加载时检查未读通知数量
+  useEffect(() => {
+    loadUnreadCount();
+  }, []);
+
+  // 监听通知更新事件
+  useEffect(() => {
+    const handleNotificationsUpdated = () => {
+      loadUnreadCount();
+    };
+
+    window.addEventListener('notificationsUpdated', handleNotificationsUpdated);
+    return () => {
+      window.removeEventListener('notificationsUpdated', handleNotificationsUpdated);
+    };
   }, []);
 
   // 从运行时配置读取订阅是否启用
@@ -600,6 +634,23 @@ export const UserMenu: React.FC = () => {
 
         {/* 菜单项 */}
         <div className='py-1'>
+          {/* 通知按钮 */}
+          <button
+            onClick={() => {
+              setIsOpen(false);
+              setIsNotificationPanelOpen(true);
+            }}
+            className='w-full px-3 py-2 text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-sm relative'
+          >
+            <Bell className='w-4 h-4 text-gray-500 dark:text-gray-400' />
+            <span className='font-medium'>通知中心</span>
+            {unreadCount > 0 && (
+              <span className='ml-auto px-2 py-0.5 text-xs font-medium bg-red-500 text-white rounded-full'>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
+
           {/* 设置按钮 */}
           <button
             onClick={handleSettings}
@@ -1358,8 +1409,13 @@ export const UserMenu: React.FC = () => {
         >
           <User className='w-full h-full' />
         </button>
+        {/* 版本更新红点 */}
         {updateStatus === UpdateStatus.HAS_UPDATE && (
           <div className='absolute top-[2px] right-[2px] w-2 h-2 bg-yellow-500 rounded-full'></div>
+        )}
+        {/* 未读通知红点 */}
+        {unreadCount > 0 && (
+          <div className='absolute top-[2px] right-[2px] w-2 h-2 bg-red-500 rounded-full'></div>
         )}
       </div>
 
@@ -1390,6 +1446,20 @@ export const UserMenu: React.FC = () => {
         isOpen={isOfflineDownloadPanelOpen}
         onClose={() => setIsOfflineDownloadPanelOpen(false)}
       />
+
+      {/* 使用 Portal 将通知面板渲染到 document.body */}
+      {isNotificationPanelOpen &&
+        mounted &&
+        createPortal(
+          <NotificationPanel
+            isOpen={isNotificationPanelOpen}
+            onClose={() => {
+              setIsNotificationPanelOpen(false);
+              loadUnreadCount(); // 关闭时刷新未读数量
+            }}
+          />,
+          document.body
+        )}
     </>
   );
 };
